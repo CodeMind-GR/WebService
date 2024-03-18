@@ -1,8 +1,8 @@
 pipeline {
     agent any
 
-    environments {
-        DOCKER_IMAGE = 'your_docker_image_name' // 도커 이미지 이름을 지정하세요.
+    environment {
+        DOCKER_IMAGE = 'streamlit-app' 
     }
 
     stages {

@@ -1,17 +1,14 @@
 import streamlit as st
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-model_id = "google/gemma-2b"
+import os
 
+model_id = "roberta-base"
+HUGGINGFACE_READ_TOKEN = os.getenv('HUGGINGFACE_READ_TOKEN')
 
-@st.cache_resource
+@st.cache(allow_output_mutation=True, show_spinner=True)
 def load_LLM_model():
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
-    tokenizer.padding_side = "left"
-    tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.truncation = True
-    tokenizer.max_length = 128
-
-    model = AutoModelForCausalLM.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, use_auth_token=HUGGINGFACE_READ_TOKEN)
+    model = AutoModelForCausalLM.from_pretrained(model_id, use_auth_token=HUGGINGFACE_READ_TOKEN)
 
     return model, tokenizer

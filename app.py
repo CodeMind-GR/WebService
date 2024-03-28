@@ -1,34 +1,44 @@
 import streamlit as st
 
+from load_model import load_LLM_model, model_id
+
 # Streamlit 페이지 설정
 st.set_page_config(page_title='chatGPT-like Interface', layout='wide')
 
-def main():
-    st.title('Chat with AI')
+model, tokenizer = load_LLM_model()
 
-    # 컨테이너 및 레이아웃 구성
-    input_container = st.container()
-    chat_container = st.container()
 
-    # 사이드바 설정 (옵션)
-    with st.sidebar:
-        st.header('About')
-        st.write("This is a simple chat interface using Streamlit.")
+# Generate response from the model
+def generate_response(prompt):
+    input_ids = tokenizer.encode(prompt, return_tensors="pt")
 
-    # 채팅 입력 필드
-    with input_container:
-        user_input = st.text_input("Type your message here:")
+    # Generate text using the model
+    output_sequences = model.generate(
+        input_ids=input_ids,
+        max_length=1000,  # Adjust max response length as needed
+        pad_token_id=tokenizer.eos_token_id
+    )
 
-    # 채팅 출력 영역
-    with chat_container:
-        if user_input:
-            # 여기에 모델을 호출하는 코드를 추가하고 결과를 변수에 할당하세요.
-            # 예시 결과 (실제로는 모델을 통해 생성된 결과를 사용해야 합니다.)
-            model_response = f"You said: '{user_input}'"
-            
-            # 사용자의 질문과 모델의 응답을 번갈아 표시합니다.
-            st.text_area("Chat", value=f"You: {user_input}\nAI: {model_response}", height=300, disabled=True)
+    # Decode the generated text
+    response = tokenizer.decode(output_sequences[0], skip_special_tokens=True)
+    return response
 
-if __name__ == '__main__':
-    main()
 
+st.session_state["model"] = model_id
+
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+if prompt := st.chat_input("What is up?"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        response = generate_response(prompt)
+        st.markdown(response)
+        st.session_state.messages.append({"role": "assistant", "content": response})

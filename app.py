@@ -1,18 +1,33 @@
 import streamlit as st
-import boto3  # AWS SDK를 임포트합니다.
+import boto3
+from os import environ as env
+
+from dotenv import find_dotenv, load_dotenv
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from load_model import load_LLM_model, model_id
+
+ENV_FILE = find_dotenv()
+if ENV_FILE:
+    load_dotenv(ENV_FILE)
 
 # Streamlit 페이지 설정
 st.set_page_config(page_title="CodeMind Project", layout="wide")
 
-# DynamoDB에 연결합니다.
+# DynamoDB에 연결
 dynamodb = boto3.resource('dynamodb', region_name='ap-northeast-2')
 table = dynamodb.Table('User')
 
+# auth 인증 후 access token 및 user info 설정
 token = st.query_params.get_all("token")
 email = st.query_params.get_all("email")
 name = st.query_params.get_all("name")
+
+# LLM model 설정
+model, tokenizer = load_LLM_model()
+
+auth0_app_url = env.get("AUTH0_APP_URL")
+
 
 def save_email_to_dynamodb(email, name):
     current_time = datetime.now(ZoneInfo("Asia/Seoul")).isoformat()
@@ -25,6 +40,22 @@ def save_email_to_dynamodb(email, name):
     )
     return response
 
+
+def generate_response(prompt):
+    input_ids = tokenizer.encode(prompt, return_tensors="pt")
+
+    # Generate text using the model
+    output_sequences = model.generate(
+        input_ids=input_ids,
+        max_length=1000,  # Adjust max response length as needed
+        pad_token_id=tokenizer.eos_token_id
+    )
+
+    # Decode the generated text
+    response = tokenizer.decode(output_sequences[0], skip_special_tokens=True)
+    return response
+
+
 def main():
     if token and email:
         save_email_to_dynamodb(email[0], name[0])
@@ -34,6 +65,7 @@ def main():
         # 토큰이 없는 경우, 홈 페이지를 표시
         display_home_page()
 
+
 def display_home_page():
     st.title("Welcome to Our ChatGPT-like Web App")
     st.write("""
@@ -41,37 +73,35 @@ def display_home_page():
         You can interact with an AI model, ask questions, and get responses in real-time.
     """)
 
-    # 로그인 버튼이 클릭되면 외부 인증 서버로 리디렉션하는 자바스크립트를 포함하는 HTML 버튼
-    auth_url = "http://localhost:3000/login"  # 외부 인증 서버의 URL
+    auth_url = auth0_app_url + "/login"  # 외부 인증 서버의 URL
     st.markdown(f'<a href="{auth_url}"><button>Login to Chat</button></a>', unsafe_allow_html=True)
 
 
 def display_chat_page():
     st.title("Chat with AI")
 
-    # 자동 리디렉션을 위한 로그아웃 링크
-    logout_url = "http://localhost:3000/logout"  # 여기서는 예시로 localhost를 사용했습니다. 실제 URL로 교체해야 합니다.
-    streamlit_app_url = "http://localhost:8501"  # Streamlit 앱의 홈 URL. 실제 환경에 맞게 수정해야 합니다.
-
-    # 로그아웃 버튼 대신 사용할 자바스크립트를 포함하는 링크
+    logout_url = auth0_app_url + "/logout"
     st.markdown(f'<a href="{logout_url}"><button>Logout</button></a>', unsafe_allow_html=True)
 
-    # 컨테이너 및 레이아웃 구성
-    input_container = st.container()
-    chat_container = st.container()
+    st.session_state["model"] = model_id
 
-    # 채팅 입력 필드
-    with input_container:
-        user_input = st.text_input("Type your message here:")
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
-    # 채팅 출력 영역
-    with chat_container:
-        if user_input:
-            # 여기에 모델을 호출하는 코드를 추가하고 결과를 변수에 할당하세요.
-            model_response = f"You said: '{user_input}'"  # 예시 응답
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-            # 사용자의 질문과 모델의 응답을 번갈아 표시
-            st.text_area("Chat", value=f"You: {user_input}\nAI: {model_response}", height=300, disabled=True)
+    if prompt := st.chat_input("What is up?"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            response = generate_response(prompt)
+            st.markdown(response)
+            st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 if __name__ == '__main__':
     main()

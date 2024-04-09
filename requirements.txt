@@ -1,4 +1,6 @@
 streamlit
+boto3
 transformers
 datasets
+load_dotenv
 torch

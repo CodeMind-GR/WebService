@@ -4,3 +4,5 @@ transformers
 datasets
 load_dotenv
 torch
+bitsandbytes
+accelerate

@@ -1,11 +1,14 @@
-import streamlit as st
-import boto3
-from os import environ as env
-
-from dotenv import find_dotenv, load_dotenv
 from datetime import datetime
+from os import environ as env
 from zoneinfo import ZoneInfo
-from load_model import load_LLM_model, model_id
+
+import boto3
+import streamlit as st
+from dotenv import find_dotenv, load_dotenv
+from transformers import pipeline
+
+from load_model import load_llm_model, model_id
+from utils import clean_output
 
 ENV_FILE = find_dotenv()
 if ENV_FILE:
@@ -24,7 +27,8 @@ email = st.query_params.get_all("email")
 name = st.query_params.get_all("name")
 
 # LLM model 설정
-model, tokenizer = load_LLM_model()
+model, tokenizer = load_llm_model()
+pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
 auth0_app_url = env.get("AUTH0_APP_URL")
 
@@ -42,18 +46,13 @@ def save_email_to_dynamodb(email, name):
 
 
 def generate_response(prompt):
-    input_ids = tokenizer.encode(prompt, return_tensors="pt")
-
-    # Generate text using the model
-    output_sequences = model.generate(
-        input_ids=input_ids,
-        max_length=1000,  # Adjust max response length as needed
-        pad_token_id=tokenizer.eos_token_id
-    )
-
-    # Decode the generated text
-    response = tokenizer.decode(output_sequences[0], skip_special_tokens=True)
-    return response
+    chat = [
+        {"role": "user", "content": prompt},
+    ]
+    prompt = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
+    inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors="pt")
+    outputs = model.generate(input_ids=inputs, max_new_tokens=512)
+    return tokenizer.decode(outputs[0])
 
 
 def main():
@@ -92,13 +91,14 @@ def display_chat_page():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    if prompt := st.chat_input("What is up?"):
+    if prompt := st.chat_input("What is up?", max_chars=4096):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
             response = generate_response(prompt)
+            response = clean_output(response)
             st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 

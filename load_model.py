@@ -21,7 +21,6 @@ def load_llm_model():
         use_auth_token=HUGGINGFACE_READ_TOKEN,
         torch_dtype=torch.bfloat16,
         revision="float16",
-        load_in_4bit=True,
     )
 
     return model, tokenizer

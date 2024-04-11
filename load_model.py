@@ -1,11 +1,16 @@
-import os
+from os import environ as env
 
 import streamlit as st
 import torch
+from dotenv import find_dotenv, load_dotenv
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
+ENV_FILE = find_dotenv()
+if ENV_FILE:
+    load_dotenv(ENV_FILE)
+
 model_id = "google/gemma-2b-it"
-HUGGINGFACE_READ_TOKEN = os.getenv('HUGGINGFACE_READ_TOKEN')
+HUGGINGFACE_READ_TOKEN = env.get('HUGGINGFACE_READ_TOKEN')
 
 
 @st.cache_resource

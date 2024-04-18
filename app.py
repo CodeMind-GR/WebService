@@ -1,3 +1,4 @@
+import requests
 from datetime import datetime
 from os import environ as env
 from zoneinfo import ZoneInfo
@@ -5,10 +6,6 @@ from zoneinfo import ZoneInfo
 import boto3
 import streamlit as st
 from dotenv import find_dotenv, load_dotenv
-from transformers import pipeline
-
-from load_model import load_llm_model, model_id
-from utils import clean_output
 
 ENV_FILE = find_dotenv()
 if ENV_FILE:
@@ -26,11 +23,8 @@ token = st.query_params.get_all("token")
 email = st.query_params.get_all("email")
 name = st.query_params.get_all("name")
 
-# LLM model 설정
-model, tokenizer = load_llm_model()
-pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
-
 auth0_app_url = env.get("AUTH0_APP_URL")
+hf_model_api_server_url = env.get("HF_MODEL_API_SERVER_URL")
 
 
 def save_email_to_dynamodb(email, name):
@@ -46,13 +40,11 @@ def save_email_to_dynamodb(email, name):
 
 
 def generate_response(prompt):
-    chat = [
-        {"role": "user", "content": prompt},
-    ]
-    prompt = tokenizer.apply_chat_template(chat, tokenize=False, add_generation_prompt=True)
-    inputs = tokenizer.encode(prompt, add_special_tokens=False, return_tensors="pt")
-    outputs = model.generate(input_ids=inputs, max_new_tokens=512)
-    return tokenizer.decode(outputs[0])
+    response = requests.post(hf_model_api_server_url, json={"text": prompt})
+    if response.status_code == 200:
+        return response.json()['generated_text']
+    else:
+        return "Error: " + response.text
 
 
 def main():
@@ -71,7 +63,6 @@ def display_home_page():
         This is a simple web application using Streamlit to demonstrate a ChatGPT-like interface.
         You can interact with an AI model, ask questions, and get responses in real-time.
     """)
-
     auth_url = auth0_app_url + "/login"  # 외부 인증 서버의 URL
     st.markdown(f'<a href="{auth_url}"><button>Login to Chat</button></a>', unsafe_allow_html=True)
 
@@ -81,8 +72,6 @@ def display_chat_page():
 
     logout_url = auth0_app_url + "/logout"
     st.markdown(f'<a href="{logout_url}"><button>Logout</button></a>', unsafe_allow_html=True)
-
-    st.session_state["model"] = model_id
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
@@ -98,7 +87,6 @@ def display_chat_page():
 
         with st.chat_message("assistant"):
             response = generate_response(prompt)
-            response = clean_output(response)
             st.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
 

@@ -8,14 +8,17 @@ spec:
     app: streamlit
   ports:
     - protocol: TCP
-      port: 80
+      port: 8501
       targetPort: 8501
 
 ---
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: streamlit-deployment
+  annotations:
+    argocd-image-updater.argoproj.io/image-list: streamlit=211125418324.dkr.ecr.ap-northeast-2.amazonaws.com/webservice:latest
 spec:
   replicas: 1
   selector:
@@ -26,37 +29,21 @@ spec:
       labels:
         app: streamlit
     spec:
-      initContainers:
-      - name: setup-env
-        image: busybox
-        command: 
-          - sh
-          - -c
-          - |
-            IP=$(kubectl get ingress auth0-ingress -n ingress-nginx -o=jsonpath='{.status.loadBalancer.ingress[0].ip}');
-            PORT=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o=jsonpath='{.spec.ports[?(@.port==80)].nodePort}');
-            echo -n "http://$IP:$PORT" > /etc/auth0-app-url/url
-        volumeMounts:
-        - name: config-volume
-          mountPath: /etc/auth0-app-url
       containers:
       - name: streamlit
-        image: 211125418324.dkr.ecr.ap-northeast-2.amazonaws.com/webservice
+        image: 211125418324.dkr.ecr.ap-northeast-2.amazonaws.com/webservice:latest
         ports:
         - containerPort: 8501
-        command: ["sh", "-c", "export AUTH0_APP_URL=$(cat /etc/auth0-app-url/url) && exec docker-entrypoint.sh"]
         env:
+        - name: AUTH0_APP_URL
+          value: "http://a3120f294fe78438d9479baf19198313-1976181292.ap-northeast-2.elb.amazonaws.com"
         - name: HF_MODEL_API_SERVER_URL
           value: "http://hf-api-svc:8000/generate-text/"
         volumeMounts:
         - name: aws-credentials-volume
           mountPath: "/root/.aws"
           readOnly: true
-        - name: config-volume
-          mountPath: /etc/auth0-app-url
       volumes:
       - name: aws-credentials-volume
         secret:
           secretName: aws-credentials
-      - name: config-volume
-        emptyDir: {}
